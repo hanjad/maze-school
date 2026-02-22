@@ -3,91 +3,124 @@ $pagetitle = "Register";
 require_once 'assets/header.php';
 require_once 'assets/dbConnect.php';
 
-$firstname = $othername = $surname = $email = $phone = $password = $confirm_password = $course = $gender = $dob = $address = "";
+$firstname = $othername = $surname = $email = $phone = $password = $confirm_password = $course = $gender = $dob = $address = $msg ="";
 
 $firstname_err = $othername_err = $surname_err = $email_err = $phone_err = $password_err = $confirm_password_err = $course_err = $gender_err = $dob_err = $address_err = $result_err = $passport_err = "";
 
+$result = $passport = null;
+
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $firstname = htmlspecialchars($_POST['first-name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $othername = htmlspecialchars($_POST['other-name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $surname = htmlspecialchars($_POST['surname'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $email = htmlspecialchars($_POST['email'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $phone = htmlspecialchars($_POST['phone'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $password = htmlspecialchars($_POST['password'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $confirm_password = htmlspecialchars($_POST['confirm-password'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $course = htmlspecialchars($_POST['course'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $gender = htmlspecialchars($_POST['gender'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $dob = htmlspecialchars($_POST['dob'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $address = htmlspecialchars($_POST['address'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $result = $_FILES['result'] ?? null;
-    $passport = $_FILES['passport'] ?? null;
-
-
-    if (empty($firstname)) {
-        $firstname_err = "First name is required.";
+    // fetching form values
+    {
+        $firstname = htmlspecialchars($_POST['first-name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $othername = htmlspecialchars($_POST['other-name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $surname = htmlspecialchars($_POST['surname'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $email = htmlspecialchars($_POST['email'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $phone = htmlspecialchars($_POST['phone'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $password = htmlspecialchars($_POST['password'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $confirm_password = htmlspecialchars($_POST['confirm-password'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $course = htmlspecialchars($_POST['course'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $gender = htmlspecialchars($_POST['gender'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $dob = htmlspecialchars($_POST['dob'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $address = htmlspecialchars($_POST['address'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $result = $_FILES['result'];
+        $passport = $_FILES['passport'];
     }
 
-    if (empty($othername)) {
-        $othername_err = "Other name is required.";
+    // validating form values
+    {
+        if (empty($firstname)) {
+            $firstname_err = "First name is required.";
+        }
+
+        if (empty($othername)) {
+            $othername_err = "Other name is required.";
+        }
+
+        if (empty($surname)) {
+            $surname_err = "Surname is required.";
+        }
+
+        if (empty($email)) {
+            $email_err = "Email is required.";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $email_err = "Invalid email format.";
+        }
+
+        if (empty($phone)) {
+            $phone_err = "Phone number is required.";
+        } elseif (!preg_match("/^(0|\+234)(7|8|9)(0|1)\d{8}$/", $phone)) {
+            $phone_err = "Invalid phone number format.";
+        }
+
+        if (empty($password)) {
+            $password_err = "Password is required.";
+        } elseif (!preg_match('/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$/', $password)) {
+            $password_err = "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.";
+        }
+
+        if (empty($confirm_password)) {
+            $confirm_password_err = "Please confirm your password.";
+        } elseif ($password !== $confirm_password) {
+            $confirm_password_err = "Passwords do not match.";
+        }
+
+        if(empty($gender)) {
+            $gender_err = "Gender is required.";
+        }
+
+        if (empty($course)) {
+            $course_err = "Course is required.";
+        }
+
+        if (empty($dob)) {
+            $dob_err = "Date of birth is required.";
+        } elseif (strtotime($dob) > time()) {
+            $dob_err = "Date of birth cannot be in the future.";
+        } elseif (strtotime($dob) > strtotime('-16 years')) {
+            $dob_err = "You must be at least 16 years old to register.";
+        }
+
+        if (empty($address)) {
+            $address_err = "Address is required.";
+        }
+
+        if ($result && $result['error'] === UPLOAD_ERR_NO_FILE) {
+            $result_err = "Result file is required.";
+        } elseif ($result && $result['error'] !== UPLOAD_ERR_OK) {
+            $result_err = "Error uploading result file.";
+        }
+
+        if ($passport && $passport['error'] === UPLOAD_ERR_NO_FILE) {
+            $passport_err = "Passport file is required.";
+        } elseif ($passport && $passport['error'] !== UPLOAD_ERR_OK) {
+            $passport_err = "Error uploading passport file.";
+        }
     }
 
-    if (empty($surname)) {
-        $surname_err = "Surname is required.";
+
+// Database logic
+{
+    if (empty($firstname_err) && empty($othername_err) && empty($surname_err) && empty($email_err) && empty($phone_err) && empty($password_err) && empty($confirm_password_err) && empty($course_err) && empty($gender_err) && empty($dob_err) && empty($address_err) && empty($result_err) && empty($passport_err)) {
+        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+        $code = rand(100000, 999999);
+
+        $result_name = $result['name'];
+        $passport_name = $passport['name'];
+
+        $query = "INSERT INTO `users`(`surname`, `firstname`, `othernames`, `email`, `otp`, `phone`, `password`, `course`, `gender`, `dob`, `address`, `result_file`, `passport`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("ssssissssssss", $surname, $firstname, $othername, $email, $code, $phone, $hashed_password, $course, $gender, $dob, $address, $result_name, $passport_name);
+        if($stmt->execute()) {
+            $msg = "Registration successful!";
+        } else {
+            $msg = "Error registering user.";
+        }
     }
 
-    if (empty($email)) {
-        $email_err = "Email is required.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $email_err = "Invalid email format.";
-    }
 
-    if (empty($phone)) {
-        $phone_err = "Phone number is required.";
-    } elseif (!preg_match("/^(0|\+234)(7|8|9)(0|1)\d{8}$/", $phone)) {
-        $phone_err = "Invalid phone number format.";
-    }
-
-    if (empty($password)) {
-        $password_err = "Password is required.";
-    } elseif (!preg_match('/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$/', $password)) {
-        $password_err = "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.";
-    }
-
-    if (empty($confirm_password)) {
-        $confirm_password_err = "Please confirm your password.";
-    } elseif ($password !== $confirm_password) {
-        $confirm_password_err = "Passwords do not match.";
-    }
-
-    if (empty($course)) {
-        $course_err = "Course is required.";
-    }
-
-    if (empty($dob)) {
-        $dob_err = "Date of birth is required.";
-    } elseif (strtotime($dob) > time()) {
-        $dob_err = "Date of birth cannot be in the future.";
-    } elseif (strtotime($dob) > strtotime('-16 years')) {
-        $dob_err = "You must be at least 16 years old to register.";
-    }
-
-    if (empty($address)) {
-        $address_err = "Address is required.";
-    }
-
-    if ($result && $result['error'] === UPLOAD_ERR_NO_FILE) {
-        $result_err = "Result file is required.";
-    } elseif ($result && $result['error'] !== UPLOAD_ERR_OK) {
-        $result_err = "Error uploading result file.";
-    }
-
-    if ($passport && $passport['error'] === UPLOAD_ERR_NO_FILE) {
-        $passport_err = "Passport file is required.";
-    } elseif ($passport && $passport['error'] !== UPLOAD_ERR_OK) {
-        $passport_err = "Error uploading passport file.";
-    }
-
-    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+}
 }
 ?>
 
@@ -101,6 +134,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
                 <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white">
                     Create an account
+                </h1>
+                <h1 class="text-xl font-bold leading-tight tracking-tight <?php echo $msg ? 'text-green-600' : 'text-red-600'; ?> md:text-2xl">
+                    <?= $msg ?>
                 </h1>
                 <form class="space-y-4 md:space-y-6" action="" method="post" enctype="multipart/form-data">
                     <!-- First Name Field -->
@@ -155,6 +191,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     <div>
                         <label for="gender" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Gender</label>
                         <select name="gender" id="gender" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
+                            <option value="">Select your gender</option>
                             <option value="male">Male</option>
                             <option value="female">Female</option>
                             <option value="other">Other</option>
